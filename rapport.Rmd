@@ -1,0 +1,219 @@
+---
+title: "rapport Dataviz"
+author: "Samuel C. & Iliass S."
+date: "2024-03-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# ----- librairies -----
+if (!require(jsonlite)) install.packages("jsonlite")
+if (!require(data.table)) install.packages("data.table")
+if (!require(bit64)) install.packages("bit64")
+if (!require(ggplot2)) install.packages("ggplot2")
+if (!require(fmsb)) install.packages("fmsb")
+if (!require(lubridate)) install.packages("lubridate")
+if (!require(digest)) install.packages("digest")
+if (!require(stringr)) install.packages("stringr")
+# ---- Chargement du dernier workspace ----
+load(".RData")
+# Si réussis, sauter le chunk spécification
+```
+
+# Introduction
+
+Le projet collaboratif français Open Food Facts fournit une base de données libre et ouverte sur les produits alimentaires commercialisés dans le monde entier. La philosophie de cette organisation est qu'œuvrer pour la transparence des données des produits alimentaires est un acte citoyen. La base de données accumule depuis les années 2012 plus de 1 million de fiches produits. Du point de vue étudiant, ce sujet data semble très pertinent avec la structuration autour du code-barres EEA. Le code EEA est régulé pour être le code d'identification unique de chaque produit en principe. En effet, sans clé unique identification unique, pas de super base de données possible (i.e.: SIRET pour les entreprises / NIR pour les citoyens français / ISBN pour les livres / VIN pour les véhicules / Référence cadastrale pour la propriété territoriale / ...).
+
+L'objectif de ce travail est d'illustrer à travers 4 types de graphiques des grandeurs principales pour apprécier la BDD de Open Food Facts. Ensuite les graphiques construits dans ce notebook seront intégrer à un tableau de bord Shiny dédié à un utilisateur final. Compte tenu de cette attente restreinte, les données exploitées pour faire tourner ce code seront compilées non plus à la maille d'un produit (identifié par un EEA) mais en 4 tableaux agrégés. La portabilité de ce projet en pièce zippé sera plus d'autant facile. En premier lieu du notebook, nous retracerons succinctement les étapes de traitement pour la compilation des données.
+
+Nos visualisations étayeront les normes alimentaires en échelle macro selon un rendement décroissant qui est lié à la qualité des données présentes. Ainsi, nous avons choisi d'aborder dans l'ordre ces 4 aspects :
+
+1.  La complétude des fiches produits pour mesurer la capacité du site à informer des normes et caractéristiques alimentaire pour un produit quelconque.
+2.  La comptabilité de familles de produits à travers les trois principaux scores :
+    -   Nutri-Score (qualité nutritionnelle),
+
+    -   Groupes Nova (niveau de transformation),
+
+    -   Éco-Score (Préservation de l’environnement).
+3.  Contribution à la créations de fiches produits pour évaluer le dynamisme d'enrichissement du projet collaboratif.
+4.  Valeurs nutritionnelles moyennes par type de produits.
+
+# Spécification
+
+Nous avons rejeté le choix du téléchargement CSV, car pour 1 million de lignes, 280 colonnes environ est trop lourd pour une lecture données basé sur la RAM avec Rstudio.
+
+La collecte des données du site Open Food Fact passe d'abord par un téléchargement complet de la base de données au format JSON. Le format JSON est semi-structuré contrairement au format tabulaire du CSV. Ainsi, nous avons d'abord écrit sur le tas un script de commandes bash (i.e. `deploy_tables.sh`) pour compiler deux sous fichiers JSON nommés ici présents `products.json` et `nutriments.json`.
+
+**N'est pas demandé d'exécuter ce script bash**, car c'est juste une liste de commandes non normalisées qui ont permis à la volée la création de ces 2 sous-fichiers JSON. À titre informatif, il fonctionne comme suit :
+
+1.  L’utilisateur doit télécharger le fichier JSONL (JSON particulier auquelle chaque ligne est un objet JSON) <https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz>
+2.  Commande `grep` pour filtrer les résultats en France (50Go environ –\> 17,6Go)
+3.  Commande `jq` pour filtrer les colonnes voulus pour les principales données et les mieux renseignés d'un produits enregistrés sur `products.json` (17,6Go –\> 713,2Mo)
+4.  Deux commandes `jq` pour créer le fichier de données des nutriments
+    1.  1ère commande pour sélectionner les 3 branches nécessaires de données et nettoyer les éléments vides enregistrés sur `nutriments.jsonl` (17,6Go –\> 821Mo)
+    2.  2ème ligne de commande pour transformer la format large (une colonne = un nutriment) à un format long (1 colonne Nutriment prend toutes les valeurs possibles de nutriments non normalisés) enregistré sur `nutriments.json` (821Mo –\> 1,1Go), cela évite d'importer dans l'environnement un tableau de 1800 colonnes coûtant plus de 30Go de RAM.
+
+# Traitement et nettoyage des données
+
+Les données importés depuis `produits.json` et `nutriments.json` sont ensuite traités au sein de l'environnement R dans le fichier `init_json.R`
+
+```{r}
+if (digest(readBin(file(".RData",open="rb"),what = "raw", n = file.info(".RData")$size), algo = "md5") != "8dcf2e94bb0adb06ecf6b17d03a8948d") {
+  rm(list = ls())
+  source("init_json.R")
+  }
+```
+
+Les produits de complétude nuls ont simplement été supprimés. De même que ceux sans noms de produit ou vide ont étés supprimés. On a écraser par 1 les complétude supérieur à 1, spécifiquement valant toutes 1,1.
+
+# Visualisations
+
+## 1. Complétude des données
+
+Cette visualisation en escalier nous permet de vérifier la qualité des fiches en examinant la complétude des données. La table utilisée, nommée data_visu1, comprend quatre variables : la complétude, qui varie de 0 à 1, la catégorie de produit, le numéro de produit, et le positionnement de .
+
+Il est important d'avoir la capacité de connaitre la qualité des donnée (complétude) pour la modération, évaluer la difficulté de l'ajout d'informations des données pour les fiches, pouvoir évaluer une restriction sur la
+
+```{r}
+#data_visu1$pnns_groups_2 =="Sucreries"
+ggplot(data_visu1, aes(y = completeness, x = cumsum(produits))) +
+ geom_area(fill = "#FF8714",color="#99510C",alpha = 0.8) +
+labs(x = "Nombre de Produits", y = "Complétude", title = "Répartition de la complétude des données produits") +
+theme_minimal() + ylim(0,1)
+```
+
+La zone blanche représente le manque de complétude des données, donc plus elle couvre un escalier, plus la fiche manque de données. En revanche, plus la zone orange couvre un escalier, plus l'information est complète.
+
+Par exemple, nous pouvons observer que parmi les 250 000 pires fiches, la complétude est inférieure à 0,26, tandis que parmi les 250 000 meilleures fiches, la complétude est d'au moins environ 60%. Enfin, les pires fiches produits ont une complétude d'au moins 0,13.
+
+Cette visualisation peut également être filtrée pour mieux catégoriser les fiches les plus défaillantes ou les plus complétées parmi les différentes catégories disponibles sur le site.
+
+## 2. Scores produits de consommations
+
+Les valeurs d'Open Food Facts reposent sur la transparence des normes alimentaires, il est donc évident de pouvoir visualiser les différents scores nutritionnels des catégories de produits du site. C'est précisément ce que réalise ces visualisations en barres.
+
+Elles utilisent la table de données data_visu2, qui comprend quatre variables : la famille de produits, le type de score associé, le rang du Score associé et le numéro de produit.
+
+Ces visualisations respectent la charte graphique des scores, ce qui les rend plus facilement interprétables.
+
+Le Nutri-Score est un système de classification des aliments selon leur qualité nutritionnelle. Il attribue à chaque produit une lettre et une couleur en fonction de sa composition nutritionnelle globale. Voici comment fonctionne le Nutri-Score :
+
+A (vert) : Aliments les plus sains, riches en nutriments essentiels, faibles en calories vides et en ingrédients controversés. B (vert clair) : Aliments bons pour la santé, mais avec une composition nutritionnelle légèrement moins favorable que ceux de la catégorie A. C (jaune) : Aliments moyens, ni bons ni mauvais, pouvant être consommés avec modération. D (orange) : Aliments moins sains, avec une composition nutritionnelle moins favorable, souvent riches en calories vides ou en ingrédients controversés. E (rouge) : Aliments les moins sains, à consommer avec parcimonie, souvent riches en sucres, en graisses saturées, en sel, ou contenant des additifs controversés.
+
+Ainsi, nous pouvons observer la distribution du Nutri-Score au sein d'une même catégorie, tout en comparant les Nutri-Scores entre les différentes familles de produits (facet).
+
+```{r}
+# Famille de l'alcool retiré car impertinent pour les nutriscores
+ggplot(data_visu2[grade == "nutriscore_grade" & !is.na(pnns_groups_1) & pnns_groups_1 != "Boissons alcoolisées"], aes(x = valeur, y = produits, fill = valeur)) +
+geom_bar(stat = "identity") +
+facet_wrap(vars(pnns_groups_1), scales = "free") +
+scale_fill_manual(values = c(a = "#118D51", b = "#7DC244", c = "#FEC927", d = "#F78124", e = "#ED5223")) +
+labs(x = "Nutriscore", y = "Produits", title = "Distribution des nutriscores par famille de produits") +
+theme_minimal() + theme(legend.position = "none")
+```
+
+Il en va de meme pour le score NOVA. Le score NOVA est une classification des aliments en fonction de leur degré de transformation.
+
+Il divise les aliments en quatre catégories :
+
+1 : Non ou peu transformés : aliments naturels ou ayant subi peu de transformations. 2 : Ingrédients culinaires transformés : aliments de base avec des transformations mineures. 3 : Aliments transformés : aliments ayant subi des transformations plus importantes. 4 : Aliments ultra-transformés : aliments très transformés avec l'ajout d'ingrédients industriels.
+
+Et enfin pour l'Eco-Score. L'Eco-Score est un système de notation environnementale des produits alimentaires. Il vise à informer les consommateurs sur l'impact écologique des produits qu'ils achètent. Voici comment fonctionne l'Eco-Score :
+
+A (vert) : Produits à faible impact environnemental, souvent issus de pratiques durables et respectueuses de l'environnement. B (vert clair) : Produits avec un impact environnemental modéré, mais généralement meilleur que la moyenne. C (jaune) : Produits avec un impact environnemental moyen, ni très bon ni très mauvais. D (orange) : Produits avec un impact environnemental assez élevé, nécessitant des améliorations. E (rouge) : Produits avec un impact environnemental élevé, souvent associés à des pratiques non durables ou dommageables pour l'environnement.
+
+```{r}
+ggplot(data_visu2[grade == "nova_groups" & !is.na(pnns_groups_1)], aes(x = valeur, y = produits, fill = valeur)) +
+geom_bar(stat = "identity") +
+facet_wrap(vars(pnns_groups_1), scales = "free") +
+scale_fill_manual(values = c(`1` = "#00AA00", `2` = "#FFCC00", `3` = "#FF6600", `4` = "#FF0000")) +
+labs(x = "Groupes NOVA", y = "Produits", title = "Distribution des groupes NOVA par famille de produits") +
+theme_minimal() + theme(legend.position = "none")
+```
+
+```{r}
+ggplot(data_visu2[grade == "ecoscore_grade" & !is.na(pnns_groups_1)], aes(x = valeur, y = produits, fill = valeur)) +
+geom_bar(stat = "identity") +
+facet_wrap(vars(pnns_groups_1), scales = "free") +
+scale_fill_manual(values = c(a = "#1E8F4E", b = "#60AC0E", c = "#EEAE0E", d = "#FE6F1E", e = "#DF1F1F")) +
+labs(x = "Éco-Scores", y = "Produits", title = "Distribution des Éco-Scores par famille de produits") +
+theme_minimal() + theme(legend.position = "none")
+```
+
+## 3. Chronologie de l'enrichissement de la base
+
+Open Food Facts fonctionne sur la base du volontariat, avec un noyau dur qui modère et ajoute des fiches produit. Cependant, il est crucial de reconnaître que ce site ne peut fonctionner et perdurer sans la contribution active des utilisateurs. Il est donc essentiel de pouvoir suivre l'évolution de ces contributions sur le site.
+
+La dernière visualisation utilise la table data_visu3, qui comprend trois variables : la catégorie, la date de création de la fiche, et le numéro de produit.
+
+Ce graphique permet de suivre l'évolution au cours du temps de la contribution totale par catégories.
+
+```{r}
+# À mettre en data réactives dans l'app shiny.
+# Cette ligne sert à dédoubler les multiples Créateurs
+# Créateurs == "tacinte" # un exemple de filtre
+data_visu3_ <- data_visu3[, .(produits = sum(produits)), by = .(période, Catégories)]
+# Cette ligne sert à passer en somme cumulé, car dans le ggplot même impossible de distribuer les sommes cumulés sur le fill
+data_visu3_ <- data_visu3_[, .(période, produits = cumsum(produits)), by = .(Catégories)]
+# Pour éviter les cassures si pas de contributions ultérieurs dans une catégorie
+top_date <- max(data_visu3_$période)
+top <- data_visu3_[, .(période = top_date, produits = max(produits)), by = .(Catégories)]
+# On duplique le dernier état sur la dernière date absolu à un contributeur
+data_visu3_ <- rbind(data_visu3_,top, fill = T)
+setorder(data_visu3_, période, Catégories, -produits)
+
+
+ggplot(data_visu3_, aes(x = période)) +
+ geom_area(aes(y = produits, fill=Catégories),alpha = 0.8) +
+labs(x = "Date", y = "Produits", title = "Contribution totales en créations de fiches") +
+theme_minimal() + theme(legend.position = "bottom") +
+scale_y_continuous(labels = scales::comma)
+```
+
+Il est possible de filtrer la contribution par utilisateur.
+
+## 4. Nutriments
+
+Cette visualisation en étoile affiche la répartition des moyennes de nutriments pour 100g par produit dans une même catégorie, offrant ainsi une meilleure approche de l'analyse des produits répertoriés sur le site.
+
+La table utilisée est data_visu4\_ issue du filtre des catégories de data_visu4. ???
+
+```{r}
+ex_liste <- c("en:white-hams","en:crackers","en:strawberry-jams")
+data_visu4_ <-  dcast(data_visu4[Categorie %in% ex_liste], 
+                      Categorie ~ Nutriment, value.var = "Valeur", fill = 0)
+rownamess <- str_extract(data_visu4_$Categorie, "(?<=:).*")
+data_visu4_[, Categorie:=NULL]
+
+data_visu4_ <- rbind(t(ceiling(apply(data_visu4_, 2, max)/5)*5),t(apply(data_visu4_, 2, function(x) 0)),data_visu4_)
+
+areas <- c(rgb(1, 0, 0, 0.25),
+           rgb(0, 1, 0, 0.25),
+           rgb(0, 0, 1, 0.25))
+
+radarchart(data_visu4_, axistype = 2, axislabcol = "black",
+           cglty = 1,
+           cglcol = "gray",
+           pcol = 2:4,
+           plwd = 2,
+           plty = 1,
+           pfcol = areas,
+           title = "Nutriments moyens en grammes pour 100g de produits consommés")
+legend("bottomright",
+       legend = rownamess,
+       bty = "n", pch = 20, col = areas,
+       text.col = "grey25", pt.cex = 2)
+```
+
+Ce graphique compare deux produits de la même catégorie, ce qui permet de déceler les différences dans leurs attributs nutritionnels. Dans notre exemple, la rosette contient moins de glucides (carbohydrates) pour 100g que le "bars".
+
+# Apllication Shiny
+
+```{r}
+shiny::runApp('app.R')
+```
+
+# Pour aller plus loin
+
+-   <https://prices.openfoodfacts.org/>
