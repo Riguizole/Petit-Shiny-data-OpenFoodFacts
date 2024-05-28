@@ -1,7 +1,6 @@
 if (!require(jsonlite)) install.packages("jsonlite")
 if (!require(data.table)) install.packages("data.table")
 if (!require(bit64)) install.packages("bit64")
-if (!require(fmsb)) install.packages("fmsb")
 if (!require(lubridate)) install.packages("lubridate")
 if (!require(stringr)) install.packages("stringr")
 
@@ -30,7 +29,7 @@ product[,created_t:=as.POSIXct(created_t, origin = "1970-01-01")]
 product[,last_updated_t:=as.POSIXct(last_updated_t, origin = "1970-01-01")]
 
 # Traductions
-dict <- fread("dictionnaire")
+dict <- fread("dictionnaire.csv")
 setkey(dict, en)
 product[dict[champs == "pnns_groups_1"], pnns_groups_1 := i.fr, on = .(pnns_groups_1 = en)]
 product[dict[champs == "pnns_groups_2"], pnns_groups_2 := i.fr, on = .(pnns_groups_2 = en)]
