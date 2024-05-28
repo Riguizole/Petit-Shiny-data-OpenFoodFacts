@@ -84,7 +84,7 @@ body <- dashboardBody(
                 a("Application mobile", href = "https://play.google.com/store/apps/details?id=org.openfoodfacts.scanner&hl=fr&gl=US"), p(""),
                 a("Open food Prices (sous-projet aux balbutiements d'ajout à la BDD des prix exercés)", href = "https://prices.openfoodfacts.org/fr/")),
             box(title = "Crédits", width = 12,
-                p("Développé par Samuel Courteille"),
+                p("Conçu par Samuel Courteille et Ilyes Sall"),
                 p("Dans le cadre d'un projet étudiant pour le master SIAD Villeneuve d'Ascq.")
                 )
     ),
