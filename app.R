@@ -5,9 +5,10 @@ if (!require(bit64)) install.packages("bit64")
 if (!require(ggplot2)) install.packages("ggplot2")
 if (!require(fmsb)) install.packages("fmsb")
 if (!require(stringr)) install.packages("stringr")
+if (!require(plotly)) install.packages("plotly")
 
 ############DONNÉEEEEEEEEEEEEEES######################
-load(".RData")
+if (file.exists(".RData")) {load(".RData")}
 if (sum(c("data_visu1", "data_visu2", "data_visu3", "data_visu3_classement", "data_visu4") %in% ls()) != 5) {
   rm(list = ls())
   source("init_json.R")
@@ -17,6 +18,30 @@ areas <- c(rgb(1, 0, 0, 0.25),
            rgb(0, 1, 0, 0.25),
            rgb(0, 0, 1, 0.25))
 Types_prod <- unique(data_visu4$Categorie)
+
+data_visu1[is.na(data_visu1$pnns_groups_2)]$pnns_groups_2 <- "NA" # Pour éviter les mauvaises manipulations des widget Shiny sur les valeurs manquantes
+Familles_prod[is.na(Familles_prod)] <- "NA"
+
+# Pour obtenir les % par valeur de grade/valeur implantés dans le graphe ultérieur
+data_visu2 <- data_visu2[order(grade,pnns_groups_1,valeur),
+                         .(valeur, produits, "%" = round(100*produits/sum(produits),0), "total" = sum(produits)),
+                         by = .(grade, pnns_groups_1)]
+# Pour scorer les catégories par meilleurs grades moyens
+data_visu2[, qualité := fcase(
+  valeur == "a", `%` * 5,
+  valeur == "b", `%` * 4,
+  valeur == "c", `%` * 3,
+  valeur == "d", `%` * 2,
+  valeur == "e", `%` * 1,
+  valeur == "1", `%` * 4,
+  valeur == "2", `%` * 3,
+  valeur == "3", `%` * 2,
+  valeur == "4", `%` * 1,
+  default = 0
+)]
+data_visu2 <- data_visu2[, .(valeur, produits, `%`, qualité = sum(qualité)), by = .(grade, pnns_groups_1)]
+data_visu2 <- data_visu2[order(grade,-qualité,pnns_groups_1,valeur)]
+data_visu2[, pnns_groups_1 := factor(pnns_groups_1, levels = unique(pnns_groups_1))]
 ####################################################|#
 
 
@@ -46,34 +71,45 @@ body <- dashboardBody(
   tabItems(
     tabItem(tabName = "tabDashboard",
             box(title = "Description du projet", width = 12,
-                p("Le projet collaboratif français Open Food Facts fournit une base de données libre et ouverte sur les produits alimentaires commercialisés dans le monde entier. La philosophie de cette organisation est qu'œuvrer pour la transparence des données des produits alimentaires est un acte citoyen. La base de données accumule depuis les années 2012 plus de 1 million de fiches produits. Du point de vue étudiant, ce sujet data semble très pertinent avec la structuration autour du code-barres EEA. Le code EEA est régulé pour être le code d'identification unique de chaque produit en principe. En effet, sans clé unique identification unique, pas de super base de données possible (i.e.: SIRET pour les entreprises / NIR pour les citoyens français / ISBN pour les livres / VIN pour les véhicules / Référence cadastrale pour la propriété territoriale / ...)."),
-                p("L'objectif de ce travail est d'illustrer à travers 4 types de graphiques des grandeurs principales pour apprécier la BDD de Open Food Facts. Ensuite les graphiques construits dans ce notebook seront intégrer à un tableau de bord Shiny dédié à un utilisateur final. Compte tenu de cette attente restreinte, les données exploitées pour faire tourner ce code seront compilées non plus à la maille d'un produit (identifié par un EEA) mais en 4 tableaux agrégés. La portabilité de ce projet en pièce zippé sera plus d'autant facile. En premier lieu du notebook, nous retracerons succinctement les étapes de traitement pour la compilation des données."),
-                p("Nos visualisations étayeront les normes alimentaires en échelle macro selon un rendement décroissant qui est lié à la qualité des données présentes. ")),
+                p("Projet étudiant de création d'un application Shiny représentant 4 appréciations de la base de données choisis d'Open Food Fact."),
+                p("L'objectif de ce travail est d'illustrer à travers 4 types de graphiques des grandeurs principales pour apprécier la BDD d'Open Food Facts."),
+                p("La donnée générale maillée sur le code EEA du produit (cas en France) a été compilée en 4 tableaux de données macro pour faciliter la conception des graphiques."),
+                p(tagList("Le", strong("visuel 1"), "montre au global la complétude des fiches produits (au moins non vide). C'est un listing des produits sur l'axe horizontal allant de la mieux compléter à la pire pour faciliter la compréhension. D'un point de vue extrême, si le carré du graphique est entièrement rempli alors cela signifie que la BDD est totalement renseigné pour tout produits... L'aire en escalier grise correspond à toute famille de produits confondus, l'aire en orange à la sélection choisis plus bas (NA par défaut; i.e. pas de famille connus). Cliquer sur un angle de l'escalier orange ouvre sur internet une fiche aléatoire illustrée par cette valeur de complétude.")),
+                p(tagList("Le", strong("visuel 2"), "classe les profils de grades sur 3 scores alimentaires connus : Le Nutri-Score / le nova / l'éco-score. Selon le score choisi à apprécier, les familles (ici moins nombreuses ; i.e. de plus haute hiérarchie) sont ordonnées moyennement des meilleurs scores aux pires scores relevés.")),
+                p(tagList("Le", strong("visuel 3"), "dessine une chronologie des fiches créées par familles de produits. Plus bas se trouve le tableau de classement des meilleurs contributeurs d'Open Food Facts (au moins 10 fiches créées). La chronologie peut être filtrée sur un contributeur en relevant son index du tableau dans le champ au milieu de la page.")),
+                p(tagList("Le", strong("visuel 4"), "compare les teneurs moyens en nutriments sur 100g par genre de produits. 3 références peuvent être comparées entre elles."))),
             box(title = "Références", width = 12,
                 a("Open Food Facts", href = "https://fr.openfoodfacts.org/"), p(""),
                 a("Dictionnaire des champs de données", href = "https://wiki.openfoodfacts.org/Data_fields"), p(""),
                 a("Application mobile", href = "https://play.google.com/store/apps/details?id=org.openfoodfacts.scanner&hl=fr&gl=US"), p(""),
                 a("Open food Prices (sous-projet aux balbutiements d'ajout à la BDD des prix exercés)", href = "https://prices.openfoodfacts.org/fr/")),
             box(title = "Crédits", width = 12,
-                p("Cette application a été développée par Samuel Courteille & Ilyes Sall."),
-                p("Dans le cadre du cours de Datavisualisation encadré par Nadarajen Veerapen au master SIAD.")
+                p("Développé par Samuel Courteille"),
+                p("Dans le cadre d'un projet étudiant pour le master SIAD Villeneuve d'Ascq.")
                 )
     ),
     tabItem(tabName = "tabVisu1",
+            fluidRow(valueBoxOutput(outputId = "total_produits", width = 6),
+                     valueBoxOutput(outputId = "completude", width = 6)),
+            fluidRow(valueBoxOutput(outputId = "super_total_produits", width = 6),
+                     valueBoxOutput(outputId = "super_completude", width = 6)),
+            fluidRow(box(title = "Profil de la complétude des fiches des meilleurs aux pires", width = 12,
+                            plotlyOutput(outputId = "visu1"),
+                            radioGroupButtons(inputId = "pnns_groups_2",
+                                              label = "Familles de produits :",
+                                              choices = Familles_prod,
+                                              individual = TRUE,
+                                              selected = "NA",
+                                              checkIcon = list(yes = tags$i(class = "fa fa-circle", 
+                                                                            style = "color: #99510C"),
+                                                               no = tags$i(class = "fa fa-circle-o", 
+                                                                           style = "color: #FF8714"))
+                                              )
+                           )
+                    ),
             fluidRow(
-              box(title = "Complétude des fiches produits", width = 12,
-                plotOutput(outputId = "visu1"))
-            ),
-            fluidRow(
-              box(title = "Sélection", width = 10,
-                pickerInput(inputId = "pnns_groups_2",
-                            label = "Famille de produits",
-                            choices = Familles_prod,
-                            selected = Familles_prod,
-                            multiple = TRUE,
-                            options = list(size = 5, `actions-box` = T, dropupAuto = T))  # Modifier le nombre en fonction de votre préférence
-                ),
-              valueBoxOutput(outputId = "completude", width = 2)
+              
+              
             )
     ),
     tabItem(tabName = "tabVisu2",
@@ -132,28 +168,81 @@ ui <- dashboardPage(
 
 server <- function(input, output) {
   
-  # Visuel 1
+  # Visuel 1 --------------------------------------------------------------
   
-  data_visu1_filtre <- reactive({
-    data_visu1[pnns_groups_2 %in% input$pnns_groups_2]
-  })
-  
-  output$visu1 <- renderPlot({
-    ggplot(data_visu1_filtre(), aes(y = completeness, x = cumsum(produits))) +
-      geom_area(fill = "#FF8714",color="#99510C",alpha = 0.8) +
-      labs(x = "Produits", y = "Complétude", title = "Répartition de la complétude des données produits") +
-      theme_minimal() + ylim(0,1)
+  output$total_produits <- renderValueBox({
+    total_produits <- max(data_visu1_filtre()$produits)
+    valueBox(value = total_produits, 
+             subtitle = paste("Nb produits",input$pnns_groups_2),
+             icon = icon("barcode"))
   })
   
   output$completude <- renderValueBox({
-    completude <- sum(data_visu1_filtre()$surface) / sum(data_visu1_filtre()$produits)
+    completude <- sum(data_visu1_filtre()$complétude * (data_visu1_filtre()$seg_produits/max(data_visu1_filtre()$produits)))
     completude <- sprintf("%.0f%%", round(completude*100))  # Formater le pourcentage
     valueBox(value = completude, 
-             subtitle = "Complétude de la données fiche produits",
+             subtitle = paste("Complétude des fiches",input$pnns_groups_2),
+             icon = icon("check"))
+  })
+  
+  output$super_total_produits <- renderValueBox({
+    total_produits <- sum(data_visu1$produits)
+    valueBox(value = total_produits, 
+             subtitle = "Nb produits dans la BDD",
              icon = icon("database"))
   })
   
-  # Visuel 2
+  output$super_completude <- renderValueBox({
+    completude <- sum(data_visu1$completeness * (data_visu1$produits/sum(data_visu1$produits)))
+    completude <- sprintf("%.0f%%", round(completude*100))  # Formater le pourcentage
+    valueBox(value = completude, 
+             subtitle = "Complétude générale des fiches",
+             icon = icon("circle-check"))
+  })
+  
+  data_visu1_filtre <- reactive({
+    data <- data_visu1[pnns_groups_2 %in% input$pnns_groups_2]
+    data$seg_produits <- data$produits
+    data$produits <- cumsum(data$produits)
+    data <- data[, .("produits" = max(produits), seg_produits = sum(seg_produits)), by = .(completeness)]
+    data <- data[, .(produits, "complétude" = completeness, seg_produits)]
+    
+    data <- rbind(data[1],data) # Astuce
+    data[1]$produits <- 0       # pour forcer l'escalier à commencer en 0
+    return(data)
+  })
+  
+  data_visu1_tout <- reactive({
+    tot <- sum(data_visu1[pnns_groups_2 %in% input$pnns_groups_2]$produits)
+    data <- data_visu1
+    data$produits <- cumsum(data$produits)
+    data <- data[, .("produits" = max(produits)), by = .(completeness)]
+    data <- data[, .(produits, "complétude" = completeness)]
+    data$produits <- tot * (data$produits / max(data$produits))
+    
+    data <- rbind(data[1],data) # Astuce
+    data[1]$produits <- 0       # pour forcer l'escalier à commencer en 0
+    return(data)
+  }) # pour le profil de répartition complétude toutes familles produits confondus
+  
+  output$visu1 <- renderPlotly({
+    p <- ggplot(data_visu1_tout(), aes(y = complétude, x = produits)) +
+      geom_area(alpha = 0.8, aes(text = NULL)) +
+      geom_area(data = data_visu1_filtre(), fill = "#FF8714",color="#99510C", alpha = 0.6, aes(text = NULL)) +
+      geom_point(data = data_visu1_filtre(), color = NA) +
+      labs(x = "Produits", y = "Complétude", title = "Le profil de complétude de la famille choisis est en orange\n (gris correspond à toutes familles confondus)") +
+      theme_minimal() + ylim(0, 1) +
+      scale_y_continuous(labels = scales::percent, limits = c(0, 1))
+    
+    style(ggplotly(p), hoverinfo = "skip", traces = 1:2)
+  })
+  
+  observeEvent(event_data("plotly_click"), {
+    click_data <- event_data("plotly_click")
+    browseURL(sample(data_visu1[completeness == click_data[["y"]] & pnns_groups_2 %in% input$pnns_groups_2, .(url)]$url,1))
+  })
+  
+  # Visuel 2 --------------------------------------------------------------
   
   data_visu2_filtre <- reactive({
     if (input$grade == "nutriscore_grade") {
@@ -166,13 +255,16 @@ server <- function(input, output) {
   output$visu2 <- renderPlot({
     ggplot(data_visu2_filtre(), aes(x = valeur, y = produits, fill = valeur)) +
       geom_bar(stat = "identity") +
+          geom_text(aes(label = paste0(`%`, "%")), 
+              position = position_stack(vjust = 0.5), 
+              fontface = "bold") +
       facet_wrap(vars(pnns_groups_1), scales = "free") +
       scale_fill_manual(values = c(`1` = "#00AA00", `2` = "#FFCC00", `3` = "#FF6600", `4` = "#FF0000", a = "#118D51", b = "#7DC244", c = "#FEC927", d = "#F78124", e = "#ED5223")) +
       labs(x = str_extract(input$grade,".*(?=_)"), y = "Produits") +
       theme_minimal() + theme(legend.position = "none")
   })
   
-  # Visuel 3
+  # Visuel 3 ---- ---------------------------------------------------------
   
   data_visu3_filtre <- reactive({
     if (input$créateur == 0) {
@@ -199,7 +291,7 @@ server <- function(input, output) {
     data_visu3_classement
   }, rownames = T)
   
-  # Visuel 4
+  # Visuel 4 --------------------------------------------------------------
   
   data_visu4_filtre <- reactive({
     data_visu4_ <-  dcast(data_visu4[Categorie %in% c(input$prod1, input$prod2, input$prod3)], 

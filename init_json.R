@@ -1,5 +1,15 @@
+if (!require(jsonlite)) install.packages("jsonlite")
+if (!require(data.table)) install.packages("data.table")
+if (!require(bit64)) install.packages("bit64")
+if (!require(fmsb)) install.packages("fmsb")
+if (!require(lubridate)) install.packages("lubridate")
+if (!require(stringr)) install.packages("stringr")
+
+# ----- Téléchargements/pré-compilations de la BDD Open Food Facts -----
+if (!file.exists("products.json") | !file.exists("nutriments.json")) {system2("sh", "deploy_tables.sh")}
+
 # ----- Table product -----
-product <- fromJSON("/media/samuel/SSD_BIS/products.json")
+product <- fromJSON("products.json")
 product <- as.data.table(product)
 colnames(product)[1] <- "id"
 product[,id:=as.integer64(id)]
@@ -25,10 +35,16 @@ setkey(dict, en)
 product[dict[champs == "pnns_groups_1"], pnns_groups_1 := i.fr, on = .(pnns_groups_1 = en)]
 product[dict[champs == "pnns_groups_2"], pnns_groups_2 := i.fr, on = .(pnns_groups_2 = en)]
 
-# Pour visu 1
 setorder(product, -completeness)
-data_visu1 <- product[, .(completeness, pnns_groups_2)]
-data_visu1 <- data_visu1[, .(produits = .N, surface = .N*completeness), by = .(completeness, pnns_groups_2)]
+
+# Pour visu 1
+data_visu1 <- product[order(-completeness, pnns_groups_2), {
+  random_row_index <- sample(.N, 1)
+  .(
+    url = paste0("https://fr.openfoodfacts.org/product/", id[random_row_index]),
+    produits = .N
+  )
+}, by = .(completeness, pnns_groups_2)]
 
 # Pour visu 2
 data_visu2 <- melt(product[, .(pnns_groups_1, nutriscore_grade, nova_groups, ecoscore_grade)],
@@ -55,7 +71,7 @@ gc()
 ###
 
 # ----- Table nutriments -----
-nutriments <- fromJSON("/media/samuel/SSD_BIS/nutriments.json")
+nutriments <- fromJSON("nutriments.json")
 nutriments <- as.data.table(nutriments)
 nutriments[,id:=as.integer64(id)]
 
@@ -89,4 +105,4 @@ gc()
 
 
 # ----- Sauvegarde workspace -----
-save.image("~/Nextcloud/🐇 SIAD 2023/Dataviz/Projet final dataviz/.RData")
+save.image(".RData")
