@@ -1,4 +1,4 @@
-# Petit projet Shiny avec données d'Open Food Facts
+# Tableau de bord Shiny avec les données d'Open Food Facts
 Petit projet étudiant de création d'une application Shiny représentant 4 appréciations de la base de données choisis d'Open Food Fact. La qualité de code sera toute relative, c'est une démonstration des capacités de visualisation ggplot2.
 
 # Comme lancer ?
