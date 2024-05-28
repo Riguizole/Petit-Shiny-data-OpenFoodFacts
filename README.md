@@ -1,7 +1,7 @@
 # ProduitConso
 Petit projet étudiant de création d'une application Shiny représentant 4 appréciations de la base de données choisis d'Open Food Fact. La qualité de code sera toute relative, c'est une démonstration des capacités de visualisation ggplot2.
 
-# Comme démarrer ?
+# Comme lancer ?
 Exécuter app.R pour lancer le tableau de bord Shiny. (Cela prend prends du temps la première fois au téléchargements/compilations des données)
 
 # Description fichiers
